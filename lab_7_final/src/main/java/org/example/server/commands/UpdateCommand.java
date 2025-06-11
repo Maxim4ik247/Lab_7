@@ -2,7 +2,9 @@ package org.example.server.commands;
 
 
 import org.example.data.network.Request;
-import org.example.server.manager.*;
+import org.example.server.manager.CollectionManager;
+import org.example.server.manager.DataBaseManager;
+import org.example.server.manager.WorkerCreator;
 
 public class UpdateCommand implements BaseCommand {
 

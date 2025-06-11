@@ -5,17 +5,16 @@ package org.example.server.manager;
 
 
 import org.example.data.network.Request;
-import org.example.data.network.Response;
 import org.example.server.commands.*;
 
 import java.util.HashMap;
-import java.util.concurrent.CompletableFuture;
-
 
 public class CommandManager {
     private final HashMap<String, BaseCommand> commandMap = new HashMap<>();
+    private final DataBaseManager dataBaseManager;
 
     public CommandManager(CollectionManager collectionManager, WorkerCreator workerCreator, DataBaseManager dataBaseManager) {
+        this.dataBaseManager = dataBaseManager;
         commandMap.put("help", new HelpCommand(this));
         commandMap.put("info", new InfoCommand(collectionManager));
         commandMap.put("show", new ShowCommand(dataBaseManager));
@@ -33,21 +32,17 @@ public class CommandManager {
         commandMap.put("register", new RegisterCommand(dataBaseManager));
     }
 
-    public String doCommand(Request input) {
+    public String doCommand (Request input) {
         String commandName = input.getCommand().split(" ")[0];
         BaseCommand command = commandMap.get(commandName);
-        System.out.println(commandName);
+        System.out.println (commandName);
         if (command != null) {
+            dataBaseManager.connectToDataBase();
             return command.executeCommand(input);
         } else {
             return "Неправильная команда: " + commandName;
         }
     }
-
-    public CompletableFuture<String> doCommandAsync(Request input) {
-        return CompletableFuture.supplyAsync(() -> doCommand(input));
-    }
-
 
     public String help() {
         String output = "";

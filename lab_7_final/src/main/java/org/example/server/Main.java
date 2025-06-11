@@ -11,10 +11,11 @@ public class Main {
 
         DataBaseManager dataBaseManager = new DataBaseManager();
 
+        dataBaseManager.connectToDataBase();
 
         CollectionManager collectionManager = new CollectionManager();
 
-        Server server = new Server(collectionManager);
+        Server server = new Server(collectionManager, dataBaseManager);
 
         server.startServer();
 

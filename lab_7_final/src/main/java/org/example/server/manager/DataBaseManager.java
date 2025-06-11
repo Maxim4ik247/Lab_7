@@ -5,9 +5,7 @@ import org.example.data.*;
 import org.example.server.handlers.HashHandler;
 
 import java.sql.*;
-import java.util.Arrays;
 import java.util.LinkedList;
-import java.util.List;
 
 public class DataBaseManager {
 
@@ -31,130 +29,150 @@ public class DataBaseManager {
     public DataBaseManager() {
     }
 
-    public void checkTables() {
-        List<String> required = Arrays.asList("workers", "my_users");
-        try (Connection conn = DriverManager.getConnection(URL, username, password)) {
-            DatabaseMetaData meta = conn.getMetaData();
-            for (String table : required) {
-                try (ResultSet rs = meta.getTables(null, null, table.toLowerCase(), new String[]{"TABLE"})) {
-                    if (!rs.next()) {
-                        throw new RuntimeException("В базе не найдена таблица: " + table);
+    public  void connectToDataBase() {
+        try {
+            connection = DriverManager.getConnection(URL, username, password); // connection не должен сущ нет многопоточки
+            if (checkRequiredTablesExist()) {
+                System.out.println("Подключено успешно");
+            }
+            else {
+                System.out.println("Ошибка при проверке таблиц: ");
+            }
+        } catch (SQLException e) {
+            System.out.println("Ошибка при подключении к базам данных");
+            System.out.println(e.getMessage());
+            System.exit(-1);
+        }
+    }
+
+    public  boolean checkRequiredTablesExist() {
+        String[] requiredTables = {"my_users", "workers"};
+        try {
+            DatabaseMetaData meta = connection.getMetaData();
+            for (String tableName: requiredTables) {
+                try (ResultSet tables = meta.getTables(null, null, tableName, new String[]{"TABLE"})) {
+                    if (!tables.next()) {
+                        System.out.println("Таблица " + tableName + " не существует.");
+                        return false;
                     }
                 }
             }
-        } catch (SQLException e) {
-            throw new RuntimeException("Ошибка при проверке схемы БД: " + e.getMessage(), e);
-        }
-    }
-
-
-    public boolean checkUser(String login, String password) {
-        try (Connection conn = DriverManager.getConnection(URL, username, password);
-             PreparedStatement ps = conn.prepareStatement(GET_USER_BY_USERNAME)) {
-            ps.setString(1, login);
-            try (ResultSet rs = ps.executeQuery()) {
-                if (rs.next()) {
-                    return rs.getString("password")
-                            .equals(HashHandler.encryptString(password));
-                }
-            }
-        } catch (SQLException e) {
-            System.out.println("Ошибка в checkUser: " + e.getMessage());
-        }
-        return false;
-    }
-
-    public boolean insertUser(String login, String password) {
-        try (Connection conn = DriverManager.getConnection(URL, username, password);
-             PreparedStatement ps = conn.prepareStatement(INSERT_USER)) {
-            ps.setString(1, login);
-            ps.setString(2, HashHandler.encryptString(password));
-            ps.executeUpdate();
+            System.out.println("Все необходимые таблицы существуют.");
             return true;
         } catch (SQLException e) {
-            System.out.println("Не может зарегистрировать пользователя: " + e.getMessage());
+            System.out.println("Ошибка при проверке таблиц: " + e.getMessage());
             return false;
         }
     }
 
-    public int getUserId(String login) {
-        try (Connection conn = DriverManager.getConnection(URL, username, password);
-             PreparedStatement ps = conn.prepareStatement(GET_USER_BY_USERNAME)) {
-            ps.setString(1, login);
-            try (ResultSet rs = ps.executeQuery()) {
-                if (rs.next()) {
-                    return rs.getInt("id");
-                }
+    public  boolean checkUser(String login, String password) {
+        try {
+            PreparedStatement getStatement = connection.prepareStatement(GET_USER_BY_USERNAME);
+            getStatement.setString(1, login);
+            ResultSet rs = getStatement.executeQuery();
+            if (rs.next()) {
+                return rs.getString("password").equals(HashHandler.encryptString(password));
             }
-        } catch (SQLException e) {
-            System.out.println("Ошибка в getUserId: " + e.getMessage());
-        }
-        return -1;
-    }
-
-    public boolean addWorker(String login, Worker worker) {
-        try (Connection conn = DriverManager.getConnection(URL, username, password);
-             PreparedStatement ps = conn.prepareStatement(INSERT_WORKER)) {
-            ps.setInt(1, getUserId(login));
-            ps.setString(2, worker.getName());
-            ps.setFloat(3, worker.getCoordinates().getX());
-            ps.setFloat(4, worker.getCoordinates().getY());
-            ps.setObject(5, worker.getCreationDate());
-            ps.setFloat(6, worker.getSalary());
-            ps.setString(7, String.valueOf(worker.getPosition()));
-            ps.setString(8, String.valueOf(worker.getStatus()));
-            ps.setInt(9, worker.getPerson().getHeight());
-            ps.setString(10, String.valueOf(worker.getPerson().getEyeColor()));
-            ps.setString(11, String.valueOf(worker.getPerson().getHairColor()));
-            ps.setString(12, String.valueOf(worker.getPerson().getNationality()));
-            ps.setFloat(13, worker.getPerson().getLocation().getX());
-            ps.setFloat(14, worker.getPerson().getLocation().getY());
-            ps.setLong(15, worker.getPerson().getLocation().getZ());
-            ps.setString(16, worker.getPerson().getLocation().getName());
-            ps.executeUpdate();
-            return true;
-        } catch (SQLException e) {
-            System.out.println("Ошибка в addWorker: " + e.getMessage());
+            return false;
+        } catch (Exception e) {
+            System.out.println(e.getMessage());
             return false;
         }
     }
 
-    public int getOwnerId(String key) {
-        try (Connection conn = DriverManager.getConnection(URL, username, password);
-             PreparedStatement ps = conn.prepareStatement(GET_OWNER_BY_KEY)) {
-            ps.setInt(1, Integer.parseInt(key));
-            try (ResultSet rs = ps.executeQuery()) {
-                if (rs.next()) {
-                    return rs.getInt("user_id");
-                }
-            }
+    public  boolean insertUser(String username, String password) {
+        try (PreparedStatement addStatement = connection.prepareStatement(INSERT_USER)) {
+            addStatement.setString(1, username);
+            addStatement.setString(2, HashHandler.encryptString(password));
+            addStatement.executeUpdate();
+            addStatement.close();
+            return true;
         } catch (SQLException e) {
-            System.out.println("Ошибка в getOwnerId: " + e.getMessage());
+            System.out.println("Не может зарегестрировать пользователя: " + e.getMessage());
+            return false;
         }
-        return -1;
     }
 
-    public boolean updateWorker(String login, Worker worker, Integer id) {
-        try (Connection conn = DriverManager.getConnection(URL, username, password);
-             PreparedStatement ps = conn.prepareStatement(UPDATE_WORKER)) {
-            ps.setInt(1, getUserId(login));
-            ps.setString(2, worker.getName());
-            ps.setFloat(3, worker.getCoordinates().getX());
-            ps.setFloat(4, worker.getCoordinates().getY());
-            ps.setObject(5, worker.getCreationDate());
-            ps.setFloat(6, worker.getSalary());
-            ps.setString(7, String.valueOf(worker.getPosition()));
-            ps.setString(8, String.valueOf(worker.getStatus()));
-            ps.setInt(9, worker.getPerson().getHeight());
-            ps.setString(10, String.valueOf(worker.getPerson().getEyeColor()));
-            ps.setString(11, String.valueOf(worker.getPerson().getHairColor()));
-            ps.setString(12, String.valueOf(worker.getPerson().getNationality()));
-            ps.setFloat(13, worker.getPerson().getLocation().getX());
-            ps.setFloat(14, worker.getPerson().getLocation().getY());
-            ps.setLong(15, worker.getPerson().getLocation().getZ());
-            ps.setString(16, worker.getPerson().getLocation().getName());
-            ps.setInt(17, id);
-            ps.executeUpdate();
+    public  int getUserId(String login) {
+        try {
+            PreparedStatement getStatement = connection.prepareStatement(GET_USER_BY_USERNAME);
+            getStatement.setString(1, login);
+            ResultSet rs = getStatement.executeQuery();
+            if (rs.next()) {
+                System.out.println(rs.getInt("id"));
+                return rs.getInt("id");
+            }
+            return -1;
+        } catch (Exception e) {
+            System.out.println(e.getMessage());
+            return -1;
+        }
+    }
+
+    public  boolean addWorker(String login, Worker worker) {
+        try {
+            PreparedStatement addStatement = connection.prepareStatement(INSERT_WORKER);
+            addStatement.setInt(1, getUserId(login));
+            addStatement.setString(2, worker.getName());
+            addStatement.setFloat(3, worker.getCoordinates().getX());
+            addStatement.setFloat(4, worker.getCoordinates().getY());
+            addStatement.setObject(5, worker.getCreationDate());
+            addStatement.setFloat(6, worker.getSalary());
+            addStatement.setString(7, String.valueOf(worker.getPosition()));
+            addStatement.setString(8, String.valueOf(worker.getStatus()));
+            addStatement.setInt(9, worker.getPerson().getHeight());
+            addStatement.setString(10, String.valueOf(worker.getPerson().getEyeColor()));
+            addStatement.setString(11, String.valueOf(worker.getPerson().getHairColor()));
+            addStatement.setString(12, String.valueOf(worker.getPerson().getNationality()));
+            addStatement.setFloat(13, worker.getPerson().getLocation().getX());
+            addStatement.setFloat(14, worker.getPerson().getLocation().getY());
+            addStatement.setLong(15, worker.getPerson().getLocation().getZ());
+            addStatement.setString(16, worker.getPerson().getLocation().getName());
+            addStatement.executeUpdate();
+            return true;
+        }
+        catch (SQLException e) {
+            System.out.println(e.getMessage());
+            return false;
+        }
+    }
+
+    public  int getOwnerId(String key) {
+        try {
+            PreparedStatement getStatement = connection.prepareStatement(GET_OWNER_BY_KEY);
+            getStatement.setInt(1, Integer.parseInt(key));
+            ResultSet rs = getStatement.executeQuery();
+            while (rs.next()) {
+                return rs.getInt("user_id");
+            }
+            return -1;
+        } catch (Exception e) {
+            System.out.println(e.getMessage());
+            return -2;
+        }
+    }
+
+    public  boolean updateWorker(String login, Worker worker, Integer id) {
+        try {
+            PreparedStatement updateStatement = connection.prepareStatement(UPDATE_WORKER);
+            updateStatement.setInt(1, getUserId(login));
+            updateStatement.setString(2, worker.getName());
+            updateStatement.setFloat(3, worker.getCoordinates().getX());
+            updateStatement.setFloat(4, worker.getCoordinates().getY());
+            updateStatement.setObject(5, worker.getCreationDate());
+            updateStatement.setFloat(6, worker.getSalary());
+            updateStatement.setString(7, String.valueOf(worker.getPosition()));
+            updateStatement.setString(8, String.valueOf(worker.getStatus()));
+            updateStatement.setInt(9, worker.getPerson().getHeight());
+            updateStatement.setString(10, String.valueOf(worker.getPerson().getEyeColor()));
+            updateStatement.setString(11, String.valueOf(worker.getPerson().getHairColor()));
+            updateStatement.setString(12, String.valueOf(worker.getPerson().getNationality()));
+            updateStatement.setFloat(13, worker.getPerson().getLocation().getX());
+            updateStatement.setFloat(14, worker.getPerson().getLocation().getY());
+            updateStatement.setLong(15, worker.getPerson().getLocation().getZ());
+            updateStatement.setString(16, worker.getPerson().getLocation().getName());
+            updateStatement.setInt(17, id);
+            updateStatement.executeUpdate();
             return true;
         } catch (SQLException e) {
             System.out.println("Не удалось обновить работника: " + e.getMessage());
@@ -162,59 +180,50 @@ public class DataBaseManager {
         }
     }
 
-    public LinkedList<Worker> getWorkers(String login) {
+    public  LinkedList<Worker> getWorkers(String login) {
         LinkedList<Worker> workers = new LinkedList<>();
-        try (Connection conn = DriverManager.getConnection(URL, username, password);
-             PreparedStatement ps = conn.prepareStatement(GET_WORKERS)) {
-            ps.setInt(1, getUserId(login));
-            try (ResultSet rs = ps.executeQuery()) {
-                while (rs.next()) {
-                    Coordinates coords = new Coordinates(
-                            rs.getFloat("coord_x"),
-                            rs.getFloat("coord_y")
-                    );
-                    Person person = new Person(
-                            rs.getInt("person_height"),
-                            Color.valueOf(rs.getString("eye_color")),
-                            Color.valueOf(rs.getString("hair_color")),
-                            Country.valueOf(rs.getString("nationality")),
-                            new Location(
-                                    rs.getFloat("location_x"),
-                                    rs.getFloat("location_y"),
-                                    rs.getLong("location_z"),
-                                    rs.getString("location_name")
-                            )
-                    );
-                    Worker w = new Worker(
-                            rs.getInt("id"),
-                            rs.getString("name"),
-                            coords,
-                            rs.getTimestamp("creation_date").toLocalDateTime(),
-                            rs.getFloat("salary"),
-                            Position.valueOf(rs.getString("position")),
-                            Status.valueOf(rs.getString("status")),
-                            person
-                    );
-                    workers.add(w);
-                }
+        try {
+            PreparedStatement statement = connection.prepareStatement(GET_WORKERS);
+             statement.setInt(1, getUserId(login));
+             ResultSet resultSet = statement.executeQuery();
+
+            while (resultSet.next()) {
+
+                Coordinates coordinates = new Coordinates(
+                        resultSet.getFloat("coord_x"),
+                        resultSet.getFloat("coord_y")
+                );
+
+
+                Person person = new Person(resultSet.getInt("person_height"), Color.valueOf(resultSet.getString("eye_color")), Color.valueOf(resultSet.getString("hair_color")), Country.valueOf(resultSet.getString("nationality")), new Location(resultSet.getFloat("location_x"), resultSet.getFloat("location_y"), resultSet.getLong("location_z"), resultSet.getString("location_name")));
+
+                Worker worker = new Worker(resultSet.getInt("id"), resultSet.getString("name"), coordinates, resultSet.getTimestamp("creation_date").toLocalDateTime(), resultSet.getFloat("salary"), Position.valueOf(resultSet.getString("position")), Status.valueOf(resultSet.getString("status")), person);
+
+
+                worker.setPerson(person);
+
+                workers.add(worker);
             }
+
         } catch (SQLException e) {
             System.out.println("Не удалось получить работников: " + e.getMessage());
         }
+
         return workers;
     }
 
-    public boolean removeById(int workerId, String login) {
-        try (Connection conn = DriverManager.getConnection(URL, username, password);
-             PreparedStatement ps = conn.prepareStatement(DELETE_WORKER_BY_ID)) {
-            ps.setInt(1, workerId);
-            ps.setInt(2, getUserId(login));
-            int rows = ps.executeUpdate();
-            if (rows == 0) {
-                System.out.println("Ошибка: worker с id = " + workerId +
-                        " не найден или не принадлежит пользователю " + login);
+    public  boolean removeById(int workerId, String login) {
+        try (PreparedStatement statement = connection.prepareStatement(DELETE_WORKER_BY_ID)) {
+            statement.setInt(1, workerId);
+            statement.setInt(2, getUserId(login));
+
+            int rowsAffected = statement.executeUpdate();
+
+            if (rowsAffected == 0) {
+                System.out.println("Ошибка: worker с id = " + workerId + " не обнаружен или не принадлежит пользователю " + login);
                 return false;
             }
+
             return true;
         } catch (SQLException e) {
             System.out.println("Ошибка при удалении worker: " + e.getMessage());
@@ -222,35 +231,42 @@ public class DataBaseManager {
         }
     }
 
-    public boolean removeFirst(String login) {
-        try (Connection conn = DriverManager.getConnection(URL, username, password);
-             PreparedStatement ps = conn.prepareStatement(DELETE_FIRST_WORKER)) {
-            ps.setInt(1, getUserId(login));
-            int rows = ps.executeUpdate();
-            if (rows == 0) {
-                System.out.println("Нет worker для удаления пользователем: " + login);
+    public  boolean removeFirst(String login) {
+        try (PreparedStatement statement = connection.prepareStatement(DELETE_FIRST_WORKER)) {
+            int userId = getUserId(login);
+            statement.setInt(1, userId);
+
+            int rowsAffected = statement.executeUpdate();
+
+            if (rowsAffected == 0) {
+                System.out.println("Нет worker доступных для удаления для пользователем: " + login);
                 return false;
             }
+
             return true;
         } catch (SQLException e) {
-            System.out.println("Ошибка при удалении первого worker: " + e.getMessage());
+            System.out.println("Ошибка при удалении worker: " + e.getMessage());
             return false;
         }
     }
 
-    public boolean clear(String login) {
-        try (Connection conn = DriverManager.getConnection(URL, username, password);
-             PreparedStatement ps = conn.prepareStatement(CLEAR_WORKERS)) {
-            ps.setInt(1, getUserId(login));
-            int rows = ps.executeUpdate();
-            if (rows == 0) {
-                System.out.println("Сборка пуста для пользователя: " + login);
+    public  boolean clear(String login){
+        try (PreparedStatement statement = connection.prepareStatement(CLEAR_WORKERS)) {
+            int userId = getUserId(login);
+            statement.setInt(1, userId);
+
+            int rowsAffected = statement.executeUpdate();
+
+            if (rowsAffected == 0) {
+                System.out.println("Нет worker доступных для удаления для пользователем: " + login);
                 return false;
             }
+
             return true;
         } catch (SQLException e) {
-            System.out.println("Ошибка при очистке workers: " + e.getMessage());
+            System.out.println("Ошибка при удалении worker: " + e.getMessage());
             return false;
         }
     }
+    
 }

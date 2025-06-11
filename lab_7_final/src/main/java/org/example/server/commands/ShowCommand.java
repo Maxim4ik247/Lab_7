@@ -3,7 +3,6 @@ package org.example.server.commands;
 
 import org.example.data.Worker;
 import org.example.data.network.Request;
-import org.example.server.manager.CollectionManager;
 import org.example.server.manager.DataBaseManager;
 
 public class ShowCommand implements BaseCommand {
